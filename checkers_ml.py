@@ -120,8 +120,7 @@ def owner(piece: int) -> int:
 def square_name(row: int, col: int) -> str:
     return f"{chr(ord('a') + col)}{BOARD_SIZE - row}"
 
-# This is the ExperimentGenerator, which just implies creating an initial
-# board.
+# This is the Experiment Generator in the slides.
 def initial_board() -> Board:
     """Return the standard American-checkers starting position."""
     cells = [EMPTY] * (BOARD_SIZE * BOARD_SIZE)
@@ -329,7 +328,8 @@ class LinearEvaluator:
         """Compute the dot product w*x for one board state."""
         return sum(weight * feature for weight, feature in zip(self.weights, features(board)))
 
-    # Here we compute the new weights based on the results
+    # Here we compute the new weights based on the results.
+    # This is the Generalizer in the slides.
     def update(self, board: Board, target: float, learning_rate: float) -> float:
         """Apply the LMS rule: wi <- wi + eta * (target - prediction) * xi.
 
@@ -431,3 +431,35 @@ def play_game(
     history.append((board, player))
     winner = terminal_winner(board, player)
     return GameResult(winner or 0, history, max_moves)
+
+def critic_examples(
+    result: GameResult,
+    evaluator: LinearEvaluator,
+) -> Iterable[tuple[Board, float]]:
+    """Yield (board, target) pairs using the deck's successor-state rule.
+
+    This is the Critic in the slides.
+
+    Successor(b) is the position after the learner's move and the opponent's
+    reply, so trace[i + 2] has the same player to move as trace[i]. Positions
+    immediately preceding termination receive the observed game result.
+
+    This is a temporal-difference idea: most targets are estimates produced by
+    the current model rather than labels supplied by a teacher. Final outcomes
+    anchor the chain with +100 for a Black win, -100 for a Red win, and 0 for a
+    draw. Repeated training propagates that information toward earlier states.
+    """
+    terminal_value = WIN_VALUE * result.winner
+    history = result.history
+    for i in range(len(history) - 1):
+        board, _player = history[i]
+        if i + 2 < len(history) - 1:
+            # Two entries ahead is after this player's move and the opponent's
+            # response, so it is again the same player's turn.
+            successor_board, _ = history[i + 2]
+            target = evaluator.value(successor_board)
+        else:
+            # Near the end there is no non-terminal two-ply successor. Use the
+            # known game result instead of another model estimate.
+            target = terminal_value
+        yield board, target
