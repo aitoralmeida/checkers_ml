@@ -4,7 +4,7 @@ A simple implementation of the checkers machine learning system described
 in Mitchell, T. M. (1997). Machine learning (Vol. 1, No. 9). New York: 
 McGraw-hill.
 
-he program implements four modules:
+The program implements four modules:
 
 * ExperimentGenerator: creates a standard initial board.
 * PerformanceSystem: selects legal moves with a learned evaluation function.
@@ -120,7 +120,8 @@ def owner(piece: int) -> int:
 def square_name(row: int, col: int) -> str:
     return f"{chr(ord('a') + col)}{BOARD_SIZE - row}"
 
-
+# This is the ExperimentGenerator, which just implies creating an initial
+# board.
 def initial_board() -> Board:
     """Return the standard American-checkers starting position."""
     cells = [EMPTY] * (BOARD_SIZE * BOARD_SIZE)
@@ -390,4 +391,43 @@ def select_move(
     # Random tie-breaking prevents a fixed board-order bias.
     return rng.choice(best_moves)
 
+def play_game(
+    black_evaluator: LinearEvaluator,
+    red_evaluator: LinearEvaluator,
+    rng: random.Random,
+    epsilon: float = 0.0,
+    max_moves: int = 200,
+) -> GameResult:
+    """Run one game and record states before every turn and at termination.
 
+    In the slides' architecture this function is the Performance System. During
+    self-play both colours use the same learned evaluator, producing the
+    solution trace that the Critic will later convert into examples.
+    """
+    board = initial_board()
+    player = BLACK
+    history: list[tuple[Board, int]] = []
+
+    # A repeated state with the same player or a long game is scored as a draw.
+    occurrences: dict[tuple[Board, int], int] = {}
+    for move_number in range(max_moves):
+        state_key = (board, player)
+        history.append(state_key)
+        winner = terminal_winner(board, player)
+        if winner is not None:
+            return GameResult(winner, history, move_number)
+
+        occurrences[state_key] = occurrences.get(state_key, 0) + 1
+        if occurrences[state_key] >= 3:
+            return GameResult(0, history, move_number)
+
+        # Separate arguments allow evaluation against another policy, although
+        # self-play passes the same evaluator for both colours.
+        evaluator = black_evaluator if player == BLACK else red_evaluator
+        move = select_move(board, player, evaluator, rng, epsilon)
+        board = apply_move(board, move)
+        player = -player
+
+    history.append((board, player))
+    winner = terminal_winner(board, player)
+    return GameResult(winner or 0, history, max_moves)
