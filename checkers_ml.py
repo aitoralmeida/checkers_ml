@@ -547,7 +547,7 @@ def evaluation_game(
         player = -player
     return 0
 
-
+# Additional question: can you modify the code to make one model play against other?
 def evaluate(evaluator: LinearEvaluator, games: int, max_moves: int, seed: int) -> None:
     """Estimate performance while alternating the learner's colour."""
     rng = random.Random(seed)
@@ -566,3 +566,59 @@ def evaluate(evaluator: LinearEvaluator, games: int, max_moves: int, seed: int) 
     print(f"learned policy vs random over {games} games")
     print(f"wins={wins} losses={losses} draws={draws}")
     print(f"win_rate={wins / games:.1%} decisive_win_rate={wins / decisive:.1%}" if decisive else "all games drawn")
+
+# Some sanity check. Students, don't do this, use unit testing.
+def run_self_tests() -> None:
+    """Check core rule and learning behaviour without an external test library."""
+    board = initial_board()
+    assert board.count(BLACK_MAN) == 12
+    assert board.count(RED_MAN) == 12
+    assert len(legal_moves(board, BLACK)) == 7
+    assert len(legal_moves(board, RED)) == 7
+
+    # Compulsory capture and board update.
+    cells = [EMPTY] * 64
+    cells[index(2, 1)] = BLACK_MAN
+    cells[index(3, 2)] = RED_MAN
+    cells[index(2, 5)] = BLACK_MAN
+    test_board = tuple(cells)
+    moves = legal_moves(test_board, BLACK)
+    assert len(moves) == 1 and moves[0].captured == ((3, 2),)
+    after = apply_move(test_board, moves[0])
+    assert after[index(4, 3)] == BLACK_MAN and after[index(3, 2)] == EMPTY
+
+    # Multiple capture.
+    cells = [EMPTY] * 64
+    cells[index(1, 0)] = BLACK_MAN
+    cells[index(2, 1)] = RED_MAN
+    cells[index(4, 3)] = RED_MAN
+    multi = legal_moves(tuple(cells), BLACK)
+    assert len(multi) == 1 and len(multi[0].captured) == 2
+
+    # Promotion.
+    cells = [EMPTY] * 64
+    cells[index(6, 1)] = BLACK_MAN
+    promoted = apply_move(tuple(cells), Move(((6, 1), (7, 0))))
+    assert promoted[index(7, 0)] == BLACK_KING
+
+    # An LMS step must reduce error on a small, non-terminal example.
+    evaluator = LinearEvaluator()
+    before = abs(1.0 - evaluator.value(test_board))
+    evaluator.update(test_board, 1.0, 0.001)
+    after_error = abs(1.0 - evaluator.value(test_board))
+    assert after_error < before
+    print("All self-tests passed.")
+
+
+def positive_int(text: str) -> int:
+    value = int(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return value
+
+
+def probability(text: str) -> float:
+    value = float(text)
+    if not 0.0 <= value <= 1.0:
+        raise argparse.ArgumentTypeError("must be between 0 and 1")
+    return value
