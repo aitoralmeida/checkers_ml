@@ -315,7 +315,8 @@ class LinearEvaluator:
         "red_threatened",
     )
 
-    # Instead of initializing the weight randomly, we start at 0.
+    # Instead of initializing the weight randomly, we start at 0. This are the parameters
+    # that the model is learning.
     # Additional question: Does changing the weight initialization chage anything?
     def __init__(self, weights: Optional[Sequence[float]] = None) -> None:
         # Starting from zero means the learner initially has no preference.
@@ -622,3 +623,64 @@ def probability(text: str) -> float:
     if not 0.0 <= value <= 1.0:
         raise argparse.ArgumentTypeError("must be between 0 and 1")
     return value
+
+# Console commands
+def build_parser() -> argparse.ArgumentParser:
+    """Define the command-line interface used by students."""
+    parser = argparse.ArgumentParser(
+        description="Train a Samuel-style checkers learner.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # Additional question: These are our hyperparameters. The ML system is not learning these,
+    # we configure them manually. Can you find an optimal configuration? 
+    train_parser = subparsers.add_parser("train", help="learn by self-play")
+    train_parser.add_argument("--games", type=positive_int, default=1000)
+    train_parser.add_argument("--learning-rate", type=float, default=0.001)
+    train_parser.add_argument("--epsilon", type=probability, default=0.10)
+    train_parser.add_argument("--max-moves", type=positive_int, default=200)
+    train_parser.add_argument("--seed", type=int, default=7)
+    # hyperparameters end here
+    train_parser.add_argument("--report-every", type=positive_int, default=100)
+    train_parser.add_argument("--load", type=Path, help="continue from saved weights")
+    train_parser.add_argument("--output", type=Path, default=Path("checkers_weights.json"))
+
+    evaluate_parser = subparsers.add_parser("evaluate", help="test saved weights against random play")
+    evaluate_parser.add_argument("weights", type=Path)
+    evaluate_parser.add_argument("--games", type=positive_int, default=200)
+    evaluate_parser.add_argument("--max-moves", type=positive_int, default=200)
+    evaluate_parser.add_argument("--seed", type=int, default=11)
+
+    subparsers.add_parser("self-test", help="run deterministic engine and learning checks")
+    return parser
+
+
+def main(argv: Optional[Sequence[str]] = None) -> None:
+    """Dispatch the chosen command. Supplying argv also makes testing easier."""
+    args = build_parser().parse_args(argv)
+    if args.command == "self-test":
+        run_self_tests()
+    elif args.command == "train":
+        if args.learning_rate <= 0:
+            raise SystemExit("--learning-rate must be positive")
+        evaluator = LinearEvaluator.load(args.load) if args.load else LinearEvaluator()
+        train(
+            evaluator,
+            args.games,
+            args.learning_rate,
+            args.epsilon,
+            args.max_moves,
+            args.seed,
+            args.report_every,
+        )
+        evaluator.save(args.output)
+        print(f"saved weights to {args.output}")
+        for name, weight in zip(LinearEvaluator.FEATURE_NAMES, evaluator.weights):
+            print(f"  {name:>18}: {weight: .6f}")
+    elif args.command == "evaluate":
+        evaluate(LinearEvaluator.load(args.weights), args.games, args.max_moves, args.seed)
+
+if __name__ == "__main__":
+    main()
+
