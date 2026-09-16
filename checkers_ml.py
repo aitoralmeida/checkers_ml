@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-A simple implementation of the checkers machine learning system described in Mitchell, T. M. (1997). Machine learning (Vol. 1, No. 9). New York: McGraw-hill.
+A simple implementation of the checkers machine learning system described 
+in Mitchell, T. M. (1997). Machine learning (Vol. 1, No. 9). New York: 
+McGraw-hill.
 
 he program implements four modules:
 
@@ -30,13 +32,20 @@ Black maximises the value function and Red minimises it.
 
 No third-party packages are required. Run python checkers_ml.py --help
 
+Students: In the code you will find 'Additional question' comments, proposing 
+changes to try or questions to answer.
+
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import random
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable, Optional, Sequence
+
 
 # ---------------------------------------------------------------------------
 # Board encoding and game constants
@@ -84,6 +93,9 @@ class GameResult:
 
 
 Board = tuple[int, ...]
+
+# This part is not for the Machine Learning part, just for the game codign
+# Search 'The machine learning part starts here' to find where it starts
 
 # ---------------------------------------------------------------------------
 # Checkers rules and move generation
@@ -276,4 +288,73 @@ def features(board: Board) -> tuple[float, ...]:
         float(red_threatened),
     )
 
+# The machine learning part starts here
+
+# ---------------------------------------------------------------------------
+# Learned value function (target-function representation + Generalizer)
+# ---------------------------------------------------------------------------
+class LinearEvaluator:
+    """Linear approximation V_hat(b) and its LMS generalizer.
+
+    This class represents the hypothesis learned by the program. It replaces
+    an enormous table of board values with only seven trainable parameters.
+    That compact representation generalises from visited boards to unseen ones,
+    but it cannot express every possible checkers strategy.
+    """
+    # The features in our approximation to the function
+    # Additional question: how useful are all the features? Do removing each
+    # one of them affect the results the same way? Are there features that are
+    # more important than others?
+    FEATURE_NAMES = (
+        "bias",
+        "black_pieces",
+        "red_pieces",
+        "black_kings",
+        "red_kings",
+        "black_threatened",
+        "red_threatened",
+    )
+
+    # Instead of initializing the weight randomly, we start at 0.
+    # Additional question: Does changing the weight initialization chage anything?
+    def __init__(self, weights: Optional[Sequence[float]] = None) -> None:
+        # Starting from zero means the learner initially has no preference.
+        self.weights = list(weights) if weights is not None else [0.0] * 7 # Number of features
+        if len(self.weights) != 7:
+            raise ValueError("The evaluator requires exactly seven weights.")
+
+    # Here we are computing our approximation function V_hat(b) = w0 + w1*x1 + ... + w6*x6
+    def value(self, board: Board) -> float:
+        """Compute the dot product w*x for one board state."""
+        return sum(weight * feature for weight, feature in zip(self.weights, features(board)))
+
+    # Here we compute the new weights based on the results
+    def update(self, board: Board, target: float, learning_rate: float) -> float:
+        """Apply the LMS rule: wi <- wi + eta * (target - prediction) * xi.
+
+        `error` is positive when the current model underestimates the target and
+        negative when it overestimates it. Multiplying by xi assigns more of the
+        correction to features that are strongly present in this board.
+        """
+        xs = features(board)
+        prediction = sum(weight * feature for weight, feature in zip(self.weights, xs))
+        error = target - prediction
+        # This is one stochastic-gradient step on squared prediction error.
+        for i, feature in enumerate(xs):
+            self.weights[i] += learning_rate * error * feature
+        return error
+
+    def save(self, path: Path) -> None:
+        data = {
+            "model": "linear_checkers_value_function",
+            "perspective": "black",
+            "feature_names": list(self.FEATURE_NAMES),
+            "weights": self.weights,
+        }
+        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path) -> "LinearEvaluator":
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls(data["weights"])
 
