@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+Author: Aitor Almeida aitor.almeida@deusto.es
+
 A simple implementation of the checkers machine learning system described 
 in Mitchell, T. M. (1997). Machine learning (Vol. 1, No. 9). New York: 
 McGraw-hill.
@@ -32,9 +34,18 @@ Black maximises the value function and Red minimises it.
 
 No third-party packages are required. Run python checkers_ml.py --help
 
+- Verify the program: 
+python3 checkers_ml.py self-test
+
+- Train through 1,000 self-play games (see the at the end the arguments to control 
+the hyperparameters):
+python3 checkers_ml.py train --games 1000 --output weights.json
+
+- Evaluate the trained model:
+python3 checkers_ml.py evaluate weights.json --games 200
+
 Students: In the code you will find 'Additional question' comments, proposing 
 changes to try or questions to answer.
-
 """
 
 from __future__ import annotations
