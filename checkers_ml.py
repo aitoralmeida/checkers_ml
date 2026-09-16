@@ -358,3 +358,36 @@ class LinearEvaluator:
         data = json.loads(path.read_text(encoding="utf-8"))
         return cls(data["weights"])
 
+# The interesting part of this method is the exploration vs explotation
+# We discussed this concept in the first unit. We control that with the epsilon 
+# parameter. An epsilon of 0 selects the best possible move (exploitation), otherwise
+# we add some probability of selecting a move randomly, allowing our learner to explore 
+# other possible branches. 
+# # Additional question: How does changing epsilon modify the results?
+def select_move(
+    board: Board,
+    player: int,
+    evaluator: LinearEvaluator,
+    rng: random.Random,
+    epsilon: float = 0.0,
+) -> Move:
+    """Choose an epsilon-greedy one-ply move using Black's perspective.
+
+    With probability epsilon, choose a random legal move (exploration).
+    Otherwise choose the move with the best predicted successor value
+    (exploitation). Black maximises; Red minimises.
+    """
+    moves = legal_moves(board, player)
+    if not moves:
+        raise ValueError("Cannot select a move from a terminal position.")
+    if rng.random() < epsilon:
+        return rng.choice(moves)
+
+    # This is a one-ply search: evaluate the board immediately after each move.
+    scored = [(evaluator.value(apply_move(board, move)), move) for move in moves]
+    best_score = (max if player == BLACK else min)(score for score, _ in scored)
+    best_moves = [move for score, move in scored if abs(score - best_score) < 1e-12]
+    # Random tie-breaking prevents a fixed board-order bias.
+    return rng.choice(best_moves)
+
+
