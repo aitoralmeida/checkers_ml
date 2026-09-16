@@ -463,3 +463,51 @@ def critic_examples(
             # known game result instead of another model estimate.
             target = terminal_value
         yield board, target
+
+# The full Actor-Critic cycle
+def train(
+    evaluator: LinearEvaluator,
+    games: int,
+    learning_rate: float,
+    epsilon: float,
+    max_moves: int,
+    seed: int,
+    report_every: int,
+) -> None:
+    """Train one shared value function through self-play.
+
+    This function connects the Experiment Generator (initial_board),
+    Performance System (play_game), Critic (critic_examples), and Generalizer
+    (LinearEvaluator.update) into one learning loop.
+    """
+    rng = random.Random(seed)
+    window = {BLACK: 0, RED: 0, 0: 0}
+    absolute_error = 0.0
+    example_count = 0
+
+    for game in range(1, games + 1):
+        # Experiment Generator: every experiment starts at the standard board.
+        # Performance System: play a game using the current hypothesis.
+        result = play_game(evaluator, evaluator, rng, epsilon, max_moves)
+        window[result.winner] += 1
+
+        # Critic: freeze all targets before changing the weights. Otherwise an
+        # update early in the loop would change targets later in the same game.
+        examples = list(critic_examples(result, evaluator))
+        rng.shuffle(examples)
+        for board, target in examples:
+            # Generalizer: one online LMS update per training example.
+            absolute_error += abs(evaluator.update(board, target, learning_rate))
+            example_count += 1
+
+        if game % report_every == 0 or game == games:
+            covered = report_every if game % report_every == 0 else game % report_every
+            mean_error = absolute_error / max(example_count, 1)
+            print(
+                f"games {game - covered + 1:>6}-{game:<6} "
+                f"black={window[BLACK]:>4} red={window[RED]:>4} "
+                f"draw={window[0]:>4} mean_abs_td_error={mean_error:.3f}"
+            )
+            window = {BLACK: 0, RED: 0, 0: 0}
+            absolute_error = 0.0
+            example_count = 0
