@@ -511,3 +511,58 @@ def train(
             window = {BLACK: 0, RED: 0, 0: 0}
             absolute_error = 0.0
             example_count = 0
+
+def random_move(
+    board: Board,
+    player: int,
+    _evaluator: LinearEvaluator,
+    rng: random.Random,
+) -> Move:
+    return rng.choice(legal_moves(board, player))
+
+
+def evaluation_game(
+    evaluator: LinearEvaluator,
+    learner_color: int,
+    rng: random.Random,
+    max_moves: int,
+) -> int:
+    """Play the learned policy against a uniformly random legal policy."""
+    board = initial_board()
+    player = BLACK
+    occurrences: dict[tuple[Board, int], int] = {}
+    for _ in range(max_moves):
+        winner = terminal_winner(board, player)
+        if winner is not None:
+            return winner
+        key = (board, player)
+        occurrences[key] = occurrences.get(key, 0) + 1
+        if occurrences[key] >= 3:
+            return 0
+        if player == learner_color:
+            move = select_move(board, player, evaluator, rng)
+        else:
+            move = random_move(board, player, evaluator, rng)
+        board = apply_move(board, move)
+        player = -player
+    return 0
+
+
+def evaluate(evaluator: LinearEvaluator, games: int, max_moves: int, seed: int) -> None:
+    """Estimate performance while alternating the learner's colour."""
+    rng = random.Random(seed)
+    wins = losses = draws = 0
+    for game in range(games):
+        # Alternating colours reduces first-player/colour bias in the metric.
+        learner_color = BLACK if game % 2 == 0 else RED
+        winner = evaluation_game(evaluator, learner_color, rng, max_moves)
+        if winner == learner_color:
+            wins += 1
+        elif winner == 0:
+            draws += 1
+        else:
+            losses += 1
+    decisive = wins + losses
+    print(f"learned policy vs random over {games} games")
+    print(f"wins={wins} losses={losses} draws={draws}")
+    print(f"win_rate={wins / games:.1%} decisive_win_rate={wins / decisive:.1%}" if decisive else "all games drawn")
